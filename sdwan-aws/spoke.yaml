@@ -1,0 +1,451 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: HR VPC Template
+Parameters:
+  AvailabilityZones:
+    Description: 'List of Availability Zones to use for the subnets in the VPC. Note:
+      The logical order is preserved.'
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+  KeyPairName:
+    Description: Deprecated. NAT gateways are now supported in all regions.
+    Type: String
+    Default: deprecated
+  PrivateSubnet1CIDR:
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$"
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 192.168.0.0/19
+    Description: CIDR block for private subnet 1A located in Availability Zone 1
+    Type: String
+  PrivateSubnetTag1:
+    AllowedPattern: ^([a-zA-Z0-9+\-._:/@]+=[a-zA-Z0-9+\-.,_:/@ *\\"'\[\]\{\}]*)?$
+    ConstraintDescription: tags must be in format "Key=Value" keys can only contain
+      [a-zA-Z0-9+\-._:/@], values can contain [a-zA-Z0-9+\-._:/@ *\\"'\[\]\{\}]
+    Default: Network=Private
+    Description: tag to add to private subnets A, in format Key=Value (Optional)
+    Type: String
+  PublicSubnet1CIDR:
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$"
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 192.168.128.0/20
+    Description: CIDR block for the public DMZ subnet 1 located in Availability Zone
+      1
+    Type: String
+  PublicSubnetTag1:
+    AllowedPattern: ^([a-zA-Z0-9+\-._:/@]+=[a-zA-Z0-9+\-.,_:/@ *\\"'\[\]\{\}]*)?$
+    ConstraintDescription: tags must be in format "Key=Value" keys can only contain
+      [a-zA-Z0-9+\-._:/@], values can contain [a-zA-Z0-9+\-._:/@ *\\"'\[\]\{\}]
+    Default: Network=Public
+    Description: tag to add to public subnets, in format Key=Value (Optional)
+    Type: String
+  VPCCIDR:
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(1[6-9]|2[0-8]))$"
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 192.168.0.0/16
+    Description: CIDR block for the VPC
+    Type: String
+  AMIOS:
+    AllowedValues:
+      - Amazon-Linux-HVM
+      - CentOS-7-HVM
+      - Ubuntu-Server-14.04-LTS-HVM
+      - Ubuntu-Server-16.04-LTS-HVM
+      - SUSE-SLES-15-HVM
+    Default: Amazon-Linux-HVM
+    Description: The Linux distribution for the AMI to be used for instances
+    Type: String
+  InstanceType:
+    AllowedValues:
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+    Default: t2.micro
+    Description: Amazon EC2 instance type for the instances
+    Type: String
+  KeyPairName:
+    Description: Enter a Public/private key pair. If you do not have one in this region,
+      please create it before continuing
+    Type: 'AWS::EC2::KeyPair::KeyName'
+Mappings:
+  AWSAMIRegionMap:
+    AMI:
+      AMZNLINUXHVM: amzn-ami-hvm-2018.03.0.20181129-x86_64-gp2
+      CENTOS7HVM: CentOS Linux 7 x86_64 HVM EBS ENA
+        1805_01-b7ee8a69-ee97-4a49-9e68-afaee216db2e-ami-77ec9308.4
+      US1404HVM: ubuntu/images/hvm-ssd/ubuntu-trusty-14.04-amd64-server-20181022
+      US1604HVM: ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-20181223
+      SLES15HVM: suse-sles-15-v20180816-hvm-ssd-x86_64
+    ap-northeast-1:
+      AMZNLINUXHVM: ami-0ab3e16f9c414dee7
+      CENTOS7HVM: ami-045f38c93733dd48d
+      US1404HVM: ami-019f92b9a431da6ed
+      US1604HVM: ami-0e4860a8c5c621447
+      SLES15HVM: ami-056ac8ad44e6a7e1f
+    ap-northeast-2:
+      AMZNLINUXHVM: ami-0e1e385b0a934254a
+      CENTOS7HVM: ami-06cf2a72dadf92410
+      US1404HVM: ami-0d4d670cc80f5ffcb
+      US1604HVM: ami-028187f7f1b856b9e
+      SLES15HVM: ami-0f81fff879bafe6b8
+    ap-south-1:
+      AMZNLINUXHVM: ami-02913db388613c3e1
+      CENTOS7HVM: ami-02e60be79e78fef21
+      US1404HVM: ami-04242e05c1ebface0
+      US1604HVM: ami-020ca1ee6a0f716a9
+      SLES15HVM: ami-01be89269d32f2a16
+    ap-southeast-1:
+      AMZNLINUXHVM: ami-05c859630889c79c8
+      CENTOS7HVM: ami-0b4dd9d65556cac22
+      US1404HVM: ami-0e820d9e86a7efa3c
+      US1604HVM: ami-0b2e3ee546433ee34
+      SLES15HVM: ami-070356c21596ddc67
+    ap-southeast-2:
+      AMZNLINUXHVM: ami-07cc15c3ba6f8e287
+      CENTOS7HVM: ami-08bd00d7713a39e7d
+      US1404HVM: ami-07e6faad15db3b345
+      US1604HVM: ami-09332079312dc6085
+      SLES15HVM: ami-0c4245381c67efb39
+    ca-central-1:
+      AMZNLINUXHVM: ami-04070f04f450607dc
+      CENTOS7HVM: ami-033e6106180a626d0
+      US1404HVM: ami-08e88818d065cbc38
+      US1604HVM: ami-01957f6afe4e49edd
+      SLES15HVM: ami-0c97d9b588207dad6
+    eu-central-1:
+      AMZNLINUXHVM: ami-010fae13a16763bb4
+      CENTOS7HVM: ami-04cf43aca3e6f3de3
+      US1404HVM: ami-067ee10914e74ffee
+      US1604HVM: ami-0cddf7994f6cbae36
+      SLES15HVM: ami-05dfd265ea534a3e9
+    eu-north-1:
+      AMZNLINUXHVM: ami-6a1f9414
+      CENTOS7HVM: ami-5ee66f20
+      US1404HVM: ami-9bd55ee5
+      US1604HVM: ami-4d78f333
+      SLES15HVM: ami-0741fa1a008af40ad
+    eu-west-1:
+      AMZNLINUXHVM: ami-028188d9b49b32a80
+      CENTOS7HVM: ami-0ff760d16d9497662
+      US1404HVM: ami-0e52b5f0b50d5c811
+      US1604HVM: ami-067b6923c66564bf6
+      SLES15HVM: ami-0a58a1b152ba55f1d
+    eu-west-2:
+      AMZNLINUXHVM: ami-04de2b60dd25fbb2e
+      CENTOS7HVM: ami-0eab3a90fc693af19
+      US1404HVM: ami-082f73b60cd9b99b2
+      US1604HVM: ami-031e556ebe95c007e
+      SLES15HVM: ami-01497522185aaa4ee
+    eu-west-3:
+      AMZNLINUXHVM: ami-0652eb0db9b20aeaf
+      CENTOS7HVM: ami-0e1ab783dc9489f34
+      US1404HVM: ami-02931cc68ee602ff1
+      US1604HVM: ami-01002a5c6f14184d4
+      SLES15HVM: ami-0f238bd4c6fdbefb0
+    sa-east-1:
+      AMZNLINUXHVM: ami-0e2c2c29d8017dd99
+      CENTOS7HVM: ami-0b8d86d4bf91850af
+      US1404HVM: ami-0e2e39cc84e09ff83
+      US1604HVM: ami-044ea9818006b773e
+      SLES15HVM: ami-0772af912976aa692
+    us-east-1:
+      AMZNLINUXHVM: ami-00eb20669e0990cb4
+      CENTOS7HVM: ami-02eac2c0129f6376b
+      US1404HVM: ami-00d4e9ff62bc40e03
+      US1604HVM: ami-0378588b4ae11ec24
+      SLES15HVM: ami-0b1764f3d7d2e2316
+    us-east-2:
+      AMZNLINUXHVM: ami-0c64dd618a49aeee8
+      CENTOS7HVM: ami-0f2b4fc905b0bd1f1
+      US1404HVM: ami-0c929bde1796e1484
+      US1604HVM: ami-07e26819c90e50327
+      SLES15HVM: ami-05ea824317ffc0c20
+    us-west-1:
+      AMZNLINUXHVM: ami-0bce08e823ed38bdd
+      CENTOS7HVM: ami-074e2d6769f445be5
+      US1404HVM: ami-026e9e583bf07479b
+      US1604HVM: ami-052ae783527d1a0c9
+      SLES15HVM: ami-00e34a7624e5a7107
+    us-west-2:
+      AMZNLINUXHVM: ami-08d489468314a58df
+      CENTOS7HVM: ami-01ed306a12b7d1c96
+      US1404HVM: ami-027386b91d3c0bf78
+      US1604HVM: ami-0135f076a31aebe66
+      SLES15HVM: ami-0f1e3b3fb0fec0361
+  LinuxAMINameMap:
+    Amazon-Linux-HVM:
+      Code: AMZNLINUXHVM
+    CentOS-7-HVM:
+      Code: CENTOS7HVM
+    Ubuntu-Server-14.04-LTS-HVM:
+      Code: US1404HVM
+    Ubuntu-Server-16.04-LTS-HVM:
+      Code: US1604HVM
+    SUSE-SLES-15-HVM:
+      Code: SLES15HVM
+Resources:
+#--------------------------------VPC Infrastructure -------------------------------------------
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: VPCCIDR
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value:
+          Ref: AWS::StackName
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateSubnet1CIDR
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Ref: AvailabilityZones
+      Tags:
+      - Key: Name
+        Value: Private subnet 1
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PublicSubnet1CIDR
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Ref: AvailabilityZones
+      Tags:
+      - Key: Name
+        Value: Public subnet 1
+      MapPublicIpOnLaunch: true
+  PrivateSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: Private subnet 1
+      - Key: Network
+        Value: Private
+  #PrivateSubnet1Route:
+  #  Type: AWS::EC2::Route
+  #  Properties:
+  #    RouteTableId:
+  #      Ref: PrivateSubnet1RouteTable
+  #    DestinationCidrBlock: 0.0.0.0/0
+  #    NatGatewayId:
+  #      Ref: NATGateway1
+  PrivateSubnet1ARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateSubnet1RouteTable
+  PublicSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: Public Subnets
+      - Key: Network
+        Value: Public
+  PublicSubnetRoute:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicSubnetRouteTable
+  NAT1EIP:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  NATGateway1:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - NAT1EIP
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+#-------------------------------------Bastion Host -------------------------------------------
+  BastionHost:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      KeyName: !Ref KeyPairName
+      ImageId: !FindInMap 
+        - AWSAMIRegionMap
+        - !Ref 'AWS::Region'
+        - !FindInMap 
+          - LinuxAMINameMap
+          - !Ref AMIOS
+          - Code
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${AWS::StackName}-BastionHost"
+  SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enables SSH Access to Hosts
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0 
+#-------------------------------------EC2 Instance -------------------------------------------
+  LinuxHost:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      KeyName: !Ref KeyPairName
+      ImageId: !FindInMap 
+        - AWSAMIRegionMap
+        - !Ref 'AWS::Region'
+        - !FindInMap 
+          - LinuxAMINameMap
+          - !Ref AMIOS
+          - Code
+      InstanceType: !Ref InstanceType
+      SubnetId: !Ref PrivateSubnet1
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Sub: "${AWS::StackName}-LinuxHost"
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      SourceDestCheck: "false"
+Outputs:
+  NAT1EIP:
+    Description: NAT 1 IP address
+    Value:
+      Ref: NAT1EIP
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-NAT1EIP"
+  PrivateSubnet1CIDR:
+    Description: Private subnet 1 CIDR in Availability Zone 1
+    Value:
+      Ref: PrivateSubnet1CIDR
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnet1CIDR"
+  PrivateSubnet1ID:
+    Description: Private subnet 1 ID in Availability Zone 1
+    Value:
+      Ref: PrivateSubnet1
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnet1ID"
+  PublicSubnet1CIDR:
+    Description: Public subnet 1 CIDR in Availability Zone 1
+    Value:
+      Ref: PublicSubnet1CIDR
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnet1CIDR"
+  PublicSubnet1ID:
+    Description: Public subnet 1 ID in Availability Zone 1
+    Value:
+      Ref: PublicSubnet1
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnet1ID"
+  PrivateSubnet1RouteTable:
+    Value:
+      Ref: PrivateSubnet1RouteTable
+    Description: Private subnet 1 route table
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnet1RouteTable"
+  PublicSubnetRouteTable:
+    Value:
+      Ref: PublicSubnetRouteTable
+    Description: Public subnet route table
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnetRouteTable"
+  VPCCIDR:
+    Value:
+      Ref: VPCCIDR
+    Description: VPC CIDR
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-VPCCIDR"
+  VPCID:
+    Value:
+      Ref: VPC
+    Description: VPC ID
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-VPCID"
+  BastionID:
+    Value: 
+      Ref: BastionHost
+    Description: Bastion ID
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-BastionID"
+  LinuxHostID:
+    Value: 
+      Ref: LinuxHost
+    Description: LinuxHost ID
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-LinuxHostID"

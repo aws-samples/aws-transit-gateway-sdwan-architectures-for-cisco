@@ -1,0 +1,503 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: The template creates TGW & an SDWAN VPC that hosts Cisco SDWAN vEdge routers that terminate SDWAN tunnels from the branch and IPsec VPN tunnels into TGW.
+Parameters:
+  CidrBlock:
+    Default: '100.64.0.0/16'
+    Description: The CIDR Block for the VPC
+    Type: String
+  AZCount:
+    Type: Number
+    Description: "# of AZs. Max - 2"
+    MinValue: 1
+    MaxValue: 2
+    Default: 2
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: >-
+      Name of an existing EC2 KeyPair to enable SSH access to the instance
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.medium
+    AllowedValues: 
+      - t2.medium
+      - t2.large
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+  UserDataForvEdge1:
+    Description: Specify the base64 encoded vedge bootstrap configuration cloud-init content as userData for vEdgeAZ1 cloud instance
+    Type: String
+  UserDataForvEdge2:
+    Description: Specify the base64 encoded vedge bootstrap configuration cloud-init content as userData for vEdgeAZ2 cloud instance
+    Type: String
+Mappings:
+  AWSRegionToAMI:
+    us-east-1: 
+      HVM64: ami-088e79ff764c94911
+    us-east-2:
+      HVM64: ami-0ddde9066ce46c386
+    us-west-1: 
+      HVM64: ami-04b15b19d204855fc
+    us-west-2: 
+      HVM64: ami-0eeda6c9530838579
+    ca-central-1: 
+      HVM64: ami-0b213ee159c1eb122
+    eu-central-1: 
+      HVM64: ami-0cf643cfb06b836e6
+    eu-west-1: 
+      HVM64: ami-0f616157a1ae60bfb
+    eu-west-2: 
+      HVM64: ami-0e2dc53a438fc45ed
+    eu-west-3: 
+      HVM64: ami-07f7f865e8aa08d12
+    ap-southeast-1: 
+      HVM64: ami-04fbe7899b67ed54a
+    ap-southeast-2: 
+      HVM64: ami-00895c97e30e0fb3a
+    ap-northeast-2: 
+      HVM64: ami-0c1a61cebb82abf98
+    ap-northeast-1: 
+      HVM64: ami-01e851e8fdfbaa812
+    ap-south-1: 
+      HVM64: ami-0136d4095d027e741
+    sa-east-1: 
+      HVM64: ami-0b45776e28a4da316
+
+Conditions: 
+  TwoAZs:  !Equals [ !Ref AZCount, 2 ]
+
+Resources:
+#--------------------------------VPC-------------------------------------------------------------
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref CidrBlock
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub SDWANVpc-${AWS::StackName}
+#--------------------------------Subnets---------------------------------------------------------
+  MgmtSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Sub
+        - ${a}.${b}.0.0/24
+        - a: !Select [0, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+          b: !Select [1, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub MgmtSubnet1-${AWS::StackName}
+  SDWANSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Sub
+        - ${a}.${b}.1.0/24
+        - a: !Select [0, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+          b: !Select [1, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub SDWANSubnet1-${AWS::StackName}
+  TGWAttchSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Sub
+        - ${a}.${b}.2.0/24
+        - a: !Select [0, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+          b: !Select [1, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]      
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub TGWAttchSubnet1-${AWS::StackName}
+  MgmtSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Sub
+        - ${a}.${b}.3.0/24
+        - a: !Select [0, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+          b: !Select [1, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+      AvailabilityZone: 
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: ""
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub MgmtSubnet2-${AWS::StackName}
+  SDWANSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Sub
+        - ${a}.${b}.4.0/24
+        - a: !Select [0, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+          b: !Select [1, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+      AvailabilityZone: 
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: ""
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub SDWANSubnet2-${AWS::StackName}
+  TGWAttchSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: !Sub
+        - ${a}.${b}.5.0/24
+        - a: !Select [0, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]
+          b: !Select [1, !Split ['.', !Select [0, !Split [ "/" , !Ref CidrBlock ]]]]      
+      AvailabilityZone: 
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: ""
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub TGWAttchSubnet2-${AWS::StackName}          
+#--------------------------------Security Groups-------------------------------------------------
+  vEdgeTGWandMgmtSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 100.64.0.0/16
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub vEdgeTGWandMgmtSecurityGroup-${AWS::StackName}
+  vEdgeSDWANSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Enable SSH access via port 22
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '23456'
+          ToPort: '24156'
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: udp
+          FromPort: '12346'
+          ToPort: '13046'
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: udp
+          FromPort: '4500'
+          ToPort: '4500'
+          CidrIp: '0.0.0.0/0'
+        - IpProtocol: udp
+          FromPort: '500'
+          ToPort: '500'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub vEdgeSDWANSecurityGroup-${AWS::StackName}
+#--------------------------------Network Interfaces----------------------------------------------
+  vEdgeSDWANXface1:
+    Type: AWS::EC2::NetworkInterface
+    Properties: 
+      Description: String
+      GroupSet:
+      - !Ref 'vEdgeSDWANSecurityGroup'
+      SourceDestCheck: true
+      SubnetId: !Ref SDWANSubnet1
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-SDWANInterface1
+  vEdgeMgmtXface1:
+    Type: AWS::EC2::NetworkInterface
+    Properties: 
+      Description: String
+      GroupSet:
+      - !Ref 'vEdgeTGWandMgmtSecurityGroup'
+      SourceDestCheck: true
+      SubnetId: !Ref MgmtSubnet1
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-MgmtInterface1
+  vEdgeTGWXface1:
+    Type: AWS::EC2::NetworkInterface
+    Properties: 
+      Description: String
+      GroupSet:
+      - !Ref 'vEdgeTGWandMgmtSecurityGroup'
+      SourceDestCheck: true
+      SubnetId: !Ref TGWAttchSubnet1
+  vEdgeSDWANXface2:
+    Type: AWS::EC2::NetworkInterface
+    Properties: 
+      Description: String
+      GroupSet:
+      - !Ref 'vEdgeSDWANSecurityGroup'
+      SourceDestCheck: true
+      SubnetId: !Ref SDWANSubnet2
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-SDWANInterface2
+  vEdgeMgmtXface2:
+    Type: AWS::EC2::NetworkInterface
+    Properties: 
+      Description: String
+      GroupSet:
+      - !Ref 'vEdgeTGWandMgmtSecurityGroup'
+      SourceDestCheck: true
+      SubnetId: !Ref MgmtSubnet2
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-MgmtInterface2
+  vEdgeTGWXface2:
+    Type: AWS::EC2::NetworkInterface
+    Properties: 
+      Description: String
+      GroupSet:
+      - !Ref 'vEdgeTGWandMgmtSecurityGroup'
+      SourceDestCheck: true
+      SubnetId: !Ref TGWAttchSubnet2
+  SDWANXfaceEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  SDWANXfaceEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  AssociateSDWANXfaceEIP1:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt SDWANXfaceEIP1.AllocationId
+      NetworkInterfaceId: !Ref vEdgeSDWANXface1
+  AssociateSDWANXfaceEIP2:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt SDWANXfaceEIP2.AllocationId
+      NetworkInterfaceId: !Ref vEdgeSDWANXface2
+  MgmtXfaceEIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  MgmtXfaceEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+  AssociateMgmtXfaceEIP1:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt MgmtXfaceEIP1.AllocationId
+      NetworkInterfaceId: !Ref vEdgeMgmtXface1
+  AssociateMgmtXfaceEIP2:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt MgmtXfaceEIP2.AllocationId
+      NetworkInterfaceId: !Ref vEdgeMgmtXface2
+#--------------------------------Route Tables---------------------------------------------------
+  SDWANRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub SDWAN-SDWANVpc-${AWS::StackName}
+  MgmtRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub Mgmt-SDWANVpc-${AWS::StackName}
+  TGWAttchRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub TGWAttch-SDWANVpc-${AWS::StackName}
+  SDWANRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref 'SDWANRouteTable'
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref 'InternetGateway'
+  SDWANSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'SDWANSubnet1'
+      RouteTableId: !Ref 'SDWANRouteTable'
+  SDWANSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'SDWANSubnet2'
+      RouteTableId: !Ref 'SDWANRouteTable'
+  MgmtRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref 'MgmtRouteTable'
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref 'InternetGateway'
+  MgmtSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'MgmtSubnet1'
+      RouteTableId: !Ref 'MgmtRouteTable'
+  MgmtSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'MgmtSubnet2'
+      RouteTableId: !Ref 'MgmtRouteTable'
+  TGWAttchSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'TGWAttchSubnet1'
+      RouteTableId: !Ref 'TGWAttchRouteTable'
+  TGWAttchSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref 'TGWAttchSubnet2'
+      RouteTableId: !Ref 'TGWAttchRouteTable'
+#--------------------------------Gateways-------------------------------------------------------
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Application
+          Value: !Ref 'AWS::StackId'
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref 'VPC'
+      InternetGatewayId: !Ref 'InternetGateway'
+#------------------ EC2 Stuff ------------------------------------------------------------
+  vEdgeAZ1:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", HVM64]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      UserData: !Ref UserDataForvEdge1 
+      NetworkInterfaces:
+        - 
+          NetworkInterfaceId: !Ref vEdgeMgmtXface1
+          DeviceIndex: 0
+          #GroupSet:
+          #  - !Ref 'vEdgeTGWandMgmtSecurityGroup'
+          #SourceDestCheck: true
+          #SubnetId: !Ref MgmtSubnet2
+        -
+          NetworkInterfaceId: !Ref vEdgeSDWANXface1
+          DeviceIndex: 1
+        - 
+          NetworkInterfaceId: !Ref vEdgeTGWXface1
+          DeviceIndex: 2
+      SourceDestCheck: "false"
+  vEdgeAZ2:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: 
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: ""
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", HVM64]
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      UserData: !Ref UserDataForvEdge2 
+      NetworkInterfaces:
+        - 
+          NetworkInterfaceId: !Ref vEdgeMgmtXface2
+          DeviceIndex: 0
+          #GroupSet:
+          #  - !Ref 'vEdgeTGWandMgmtSecurityGroup'
+          #SourceDestCheck: true
+          #SubnetId: !Ref MgmtSubnet1
+        -
+          NetworkInterfaceId: !Ref vEdgeSDWANXface2
+          DeviceIndex: 1
+        - 
+          NetworkInterfaceId: !Ref vEdgeTGWXface2
+          DeviceIndex: 2
+      SourceDestCheck: "false"
+Outputs:
+  SDWANXfaceEIP1:
+    Description: SDWAN IP for vEdgeAZ1
+    Value: !Ref SDWANXfaceEIP1
+    Export:
+      Name: !Sub '${AWS::StackName}-SDWANXfaceEIP1'
+  SDWANXfaceEIP2:
+    Description: SDWAN IP for vEdgeAZ2
+    Value: !Ref SDWANXfaceEIP2
+    Export:
+      Name: !Sub '${AWS::StackName}-SDWANXfaceEIP2'
+  SDWANVpc:
+    Value: !Ref VPC
+    Description: The VPC ID for the SDWAN VPC.
+    Export:
+      Name: !Sub ${AWS::StackName}-SDWANVpc    
