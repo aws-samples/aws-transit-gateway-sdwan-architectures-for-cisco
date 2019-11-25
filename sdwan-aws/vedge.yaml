@@ -458,7 +458,10 @@ Resources:
         - 
           NetworkInterfaceId: !Ref vEdgeTGWXface1
           DeviceIndex: 2
-      SourceDestCheck: "false"
+      #SourceDestCheck: "false"
+      Tags:
+        - Key: Name
+          Value: !Sub vedge1-cloud-${AWS::StackName}
   vEdgeAZ2:
     Type: AWS::EC2::Instance
     Properties:
@@ -484,7 +487,10 @@ Resources:
         - 
           NetworkInterfaceId: !Ref vEdgeTGWXface2
           DeviceIndex: 2
-      SourceDestCheck: "false"
+      #SourceDestCheck: "false"
+      Tags:
+        - Key: Name
+          Value: !Sub vedge2-cloud-${AWS::StackName}
 Outputs:
   SDWANXfaceEIP1:
     Description: SDWAN IP for vEdgeAZ1
