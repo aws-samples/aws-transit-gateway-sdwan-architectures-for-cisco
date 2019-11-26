@@ -258,7 +258,7 @@ Resources:
       Description: String
       GroupSet:
       - !Ref 'vEdgeSDWANSecurityGroup'
-      SourceDestCheck: true
+      SourceDestCheck: false
       SubnetId: !Ref SDWANSubnet1
       Tags:
       - Key: Name
@@ -280,7 +280,7 @@ Resources:
       Description: String
       GroupSet:
       - !Ref 'vEdgeTGWandMgmtSecurityGroup'
-      SourceDestCheck: true
+      SourceDestCheck: false
       SubnetId: !Ref TGWAttchSubnet1
   vEdgeSDWANXface2:
     Type: AWS::EC2::NetworkInterface
@@ -288,7 +288,7 @@ Resources:
       Description: String
       GroupSet:
       - !Ref 'vEdgeSDWANSecurityGroup'
-      SourceDestCheck: true
+      SourceDestCheck: false
       SubnetId: !Ref SDWANSubnet2
       Tags:
       - Key: Name
@@ -310,7 +310,7 @@ Resources:
       Description: String
       GroupSet:
       - !Ref 'vEdgeTGWandMgmtSecurityGroup'
-      SourceDestCheck: true
+      SourceDestCheck: false
       SubnetId: !Ref TGWAttchSubnet2
   SDWANXfaceEIP1:
     Type: AWS::EC2::EIP
@@ -448,17 +448,12 @@ Resources:
         - 
           NetworkInterfaceId: !Ref vEdgeMgmtXface1
           DeviceIndex: 0
-          #GroupSet:
-          #  - !Ref 'vEdgeTGWandMgmtSecurityGroup'
-          #SourceDestCheck: true
-          #SubnetId: !Ref MgmtSubnet2
         -
           NetworkInterfaceId: !Ref vEdgeSDWANXface1
           DeviceIndex: 1
         - 
           NetworkInterfaceId: !Ref vEdgeTGWXface1
           DeviceIndex: 2
-      #SourceDestCheck: "false"
       Tags:
         - Key: Name
           Value: !Sub vedge1-cloud-${AWS::StackName}
@@ -477,17 +472,12 @@ Resources:
         - 
           NetworkInterfaceId: !Ref vEdgeMgmtXface2
           DeviceIndex: 0
-          #GroupSet:
-          #  - !Ref 'vEdgeTGWandMgmtSecurityGroup'
-          #SourceDestCheck: true
-          #SubnetId: !Ref MgmtSubnet1
         -
           NetworkInterfaceId: !Ref vEdgeSDWANXface2
           DeviceIndex: 1
         - 
           NetworkInterfaceId: !Ref vEdgeTGWXface2
           DeviceIndex: 2
-      #SourceDestCheck: "false"
       Tags:
         - Key: Name
           Value: !Sub vedge2-cloud-${AWS::StackName}
